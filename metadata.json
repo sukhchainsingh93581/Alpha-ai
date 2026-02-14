@@ -1,0 +1,8 @@
+{
+  "name": "AI App & Game Dev Studio",
+  "description": "A professional platform for generating modern web apps and HTML5 games with structured AI workflows, Firebase integration, and advanced prompt engineering.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
