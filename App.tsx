@@ -1,17 +1,17 @@
 
 import React, { useState, useEffect } from 'react';
-import { User, Message, AppSettings, UserTheme, ChatProject } from './types';
-import { FIREBASE_CONFIG, DEFAULT_DARK_THEME, DEFAULT_LIGHT_THEME } from './constants';
-import { generateAIContentStream } from './services/geminiService';
-import Auth from './components/Auth';
-import Dashboard from './components/Dashboard';
-import Tools from './components/Tools';
-import Premium from './components/Premium';
-import Profile from './components/Profile';
-import AdminPanel from './components/AdminPanel';
-import ChatInterface from './components/ChatInterface';
-import MaintenanceScreen from './components/MaintenanceScreen';
-import { Layout } from './components/Layout';
+import { User, Message, AppSettings, UserTheme, ChatProject } from './types.ts';
+import { FIREBASE_CONFIG, DEFAULT_DARK_THEME, DEFAULT_LIGHT_THEME } from './constants.ts';
+import { generateAIContentStream } from './services/geminiService.ts';
+import Auth from './components/Auth.tsx';
+import Dashboard from './components/Dashboard.tsx';
+import Tools from './components/Tools.tsx';
+import Premium from './components/Premium.tsx';
+import Profile from './components/Profile.tsx';
+import AdminPanel from './components/AdminPanel.tsx';
+import ChatInterface from './components/ChatInterface.tsx';
+import MaintenanceScreen from './components/MaintenanceScreen.tsx';
+import { Layout } from './components/Layout.tsx';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);

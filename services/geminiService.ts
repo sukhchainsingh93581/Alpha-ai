@@ -1,4 +1,3 @@
-
 import { GoogleGenAI } from "@google/genai";
 import { DEV_AI_INSTRUCTIONS } from "../constants";
 
@@ -12,6 +11,7 @@ export const generateAIContentStream = async (
     throw new Error("Missing AI API Key. System not ready.");
   }
   
+  // Initializing GoogleGenAI client with apiKey parameter
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const contents = history.map(h => ({
@@ -29,8 +29,9 @@ export const generateAIContentStream = async (
     : DEV_AI_INSTRUCTIONS;
 
   try {
+    // Upgraded to gemini-3-pro-preview for complex coding tasks as per task-specific model guidelines
     const responseStream = await ai.models.generateContentStream({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-3-pro-preview',
       contents: contents as any,
       config: {
         systemInstruction: finalInstruction,
@@ -41,6 +42,7 @@ export const generateAIContentStream = async (
 
     let fullText = "";
     for await (const chunk of responseStream) {
+      // Correctly accessing the .text property from the GenerateContentResponse chunk
       const chunkText = chunk.text || "";
       if (chunkText) {
         fullText += chunkText;
