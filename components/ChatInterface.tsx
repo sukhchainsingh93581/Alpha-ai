@@ -1,4 +1,3 @@
-
 import React, { useRef, useEffect, useState } from 'react';
 import { Message, User } from '../types';
 
@@ -10,10 +9,11 @@ interface ChatInterfaceProps {
   onDeleteMessage?: (id: string) => void;
   onRegenerate?: () => void;
   onNavigate?: (page: string) => void;
+  isAiReady?: boolean;
 }
 
 const ChatInterface: React.FC<ChatInterfaceProps> = ({ 
-  messages, onSend, isGenerating, user, onDeleteMessage, onRegenerate, onNavigate 
+  messages, onSend, isGenerating, user, onDeleteMessage, onRegenerate, onNavigate, isAiReady 
 }) => {
   const [inputText, setInputText] = useState('');
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
@@ -27,7 +27,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (inputText.trim() && !isGenerating) {
+    if (inputText.trim() && !isGenerating && isAiReady) {
       onSend(inputText);
       setInputText('');
     }
@@ -86,6 +86,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   return (
     <div className="flex flex-col h-full bg-[var(--bg-primary)] relative">
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar pb-10">
+        {messages.length === 0 && (
+          <div className="h-full flex flex-col items-center justify-center opacity-20 text-center px-10">
+            <i className="fas fa-robot text-6xl mb-6 text-[var(--accent)]"></i>
+            <h2 className="text-xl font-black uppercase tracking-tighter mb-2">Neural Workspace Active</h2>
+            <p className="text-[10px] font-black uppercase tracking-widest leading-relaxed">System ready for modern app & game architectural prompts.</p>
+          </div>
+        )}
         {messages.map((msg, index) => (
           <div key={msg.id} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
             <div className={`max-w-[90%] p-5 rounded-[1.5rem] text-sm shadow-sm ${msg.role === 'user' ? 'bg-[var(--accent)] text-black rounded-tr-none font-bold' : 'bg-[var(--bg-card)] border border-[var(--border)] text-[var(--text-primary)] rounded-tl-none whitespace-pre-wrap'}`}>
@@ -146,17 +153,18 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           
           <input 
             type="text" 
-            placeholder={isGenerating ? "AI is processing..." : "Describe your idea..."} 
-            className="flex-1 min-w-0 bg-[var(--bg-primary)] border border-[var(--border)] text-[var(--text-primary)] rounded-2xl px-5 py-3 text-sm focus:border-[var(--accent)] outline-none font-medium h-12" 
+            placeholder={!isAiReady ? "Initializing AI Engine..." : isGenerating ? "AI is processing..." : "Describe your idea..."} 
+            className="flex-1 min-w-0 bg-[var(--bg-primary)] border border-[var(--border)] text-[var(--text-primary)] rounded-2xl px-5 py-3 text-sm focus:border-[var(--accent)] outline-none font-medium h-12 disabled:opacity-50" 
             value={inputText} 
             onChange={(e) => setInputText(e.target.value)} 
-            disabled={isGenerating} 
+            disabled={isGenerating || !isAiReady} 
           />
 
           <div className="flex gap-2 shrink-0 pr-1">
             <button 
               type="button"
               onClick={handleFileUploadClick}
+              disabled={!isAiReady}
               className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all active:scale-90 shadow-xl relative border ${user?.premium ? 'bg-[var(--bg-primary)] border-[var(--border)] text-[var(--accent)]' : 'bg-gray-800/30 border-transparent text-gray-500'}`}
             >
               <i className="fas fa-paperclip text-base"></i>
@@ -167,7 +175,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             
             <button 
               type="submit" 
-              disabled={!inputText.trim() || isGenerating} 
+              disabled={!inputText.trim() || isGenerating || !isAiReady} 
               className="w-12 h-12 bg-[var(--button-bg)] text-black rounded-2xl flex items-center justify-center transition-all active:scale-90 disabled:opacity-50 shadow-xl shadow-[var(--accent)]/20"
             >
               {isGenerating ? <i className="fas fa-circle-notch fa-spin text-base"></i> : <i className="fas fa-paper-plane text-base"></i>}
@@ -175,7 +183,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           </div>
         </form>
         <div className="flex justify-between items-center mt-3 px-2">
-          <p className="text-[9px] text-[var(--text-secondary)] uppercase tracking-widest font-black opacity-50">{user?.premium ? '💎 PRO SYSTEM ONLINE' : '⚡ FREE DEVELOPER'}</p>
+          <p className="text-[9px] text-[var(--text-secondary)] uppercase tracking-widest font-black opacity-50">
+            {!isAiReady ? '⏳ System Connecting...' : user?.premium ? '💎 PRO SYSTEM ONLINE' : '⚡ FREE DEVELOPER'}
+          </p>
           {!user?.premium && <p className="text-[9px] font-black text-yellow-500 uppercase tracking-widest"><i className="fas fa-clock mr-1"></i> {Math.floor((user?.remaining_ai_seconds || 0) / 60)}m Left</p>}
         </div>
       </div>

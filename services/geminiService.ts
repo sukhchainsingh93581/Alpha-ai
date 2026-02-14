@@ -1,3 +1,4 @@
+
 import { GoogleGenAI } from "@google/genai";
 import { DEV_AI_INSTRUCTIONS } from "../constants";
 
@@ -7,12 +8,16 @@ export const generateAIContentStream = async (
   onChunk: (text: string) => void,
   overrideSystemInstruction?: string
 ) => {
-  if (!process.env.API_KEY) {
-    throw new Error("Missing AI API Key. System not ready.");
+  // Access global environment polyfilled in index.tsx
+  const globalObj = (typeof globalThis !== 'undefined' ? globalThis : window) as any;
+  const apiKey = globalObj.process?.env?.API_KEY;
+
+  if (!apiKey) {
+    throw new Error("Missing AI API Key. Please add one in the Admin Panel.");
   }
   
-  // Initializing GoogleGenAI client with apiKey parameter
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  // Create instance with the key provided via Admin Panel
+  const ai = new GoogleGenAI({ apiKey });
   
   const contents = history.map(h => ({
     role: h.role === 'ai' ? 'model' : 'user',
@@ -29,8 +34,7 @@ export const generateAIContentStream = async (
     : DEV_AI_INSTRUCTIONS;
 
   try {
-    // Upgraded to gemini-3-pro-preview for complex coding tasks
-    // Removed thinkingConfig { thinkingBudget: 0 } as it is invalid for the Pro series models
+    // Using gemini-3-pro-preview as requested for complex tasks
     const responseStream = await ai.models.generateContentStream({
       model: 'gemini-3-pro-preview',
       contents: contents as any,
@@ -42,7 +46,6 @@ export const generateAIContentStream = async (
 
     let fullText = "";
     for await (const chunk of responseStream) {
-      // Correctly accessing the .text property from the GenerateContentResponse chunk
       const chunkText = chunk.text || "";
       if (chunkText) {
         fullText += chunkText;

@@ -18,13 +18,13 @@ const App: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<string>('auth');
   const [messages, setMessages] = useState<Message[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isAiReady, setIsAiReady] = useState(false);
   const [selectedTool, setSelectedTool] = useState<string | null>(null);
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
   const [globalTheme, setGlobalTheme] = useState<UserTheme | null>(null);
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
   const [projects, setProjects] = useState<ChatProject[]>([]);
   
-  // Custom Instruction States
   const [customInstructions, setCustomInstructions] = useState<string>('');
   const [isInstructionModalOpen, setIsInstructionModalOpen] = useState(false);
 
@@ -33,19 +33,32 @@ const App: React.FC = () => {
     const hydrateAIKeys = async () => {
       try {
         const res = await fetch(`${FIREBASE_CONFIG.databaseURL}/ai_api_keys.json`);
-        if (!res.ok) return;
+        if (!res.ok) throw new Error("Could not fetch keys");
         const keys = await res.json();
+        
         if (keys && Array.isArray(keys) && keys.length > 0) {
-          // Select a key from the pool and set it to process.env for the Gemini SDK
+          // Select a random key from the pool provided by Admin
           const activeKey = keys[Math.floor(Math.random() * keys.length)];
-          (window as any).process.env.API_KEY = activeKey;
-          console.log("AI Engine Initialized successfully.");
+          // Set to global scope so services can pick it up
+          const globalObj = (typeof globalThis !== 'undefined' ? globalThis : window) as any;
+          if (!globalObj.process) globalObj.process = { env: {} };
+          globalObj.process.env.API_KEY = activeKey;
+          
+          setIsAiReady(true);
+          console.log("AI Key Loaded from Admin Pool.");
+        } else {
+          console.warn("API Key Pool is empty in Admin Panel.");
+          setIsAiReady(false);
         }
       } catch (e) {
-        console.error("AI Key Hydration failed:", e);
+        console.error("AI Hydration failed:", e);
+        setIsAiReady(false);
       }
     };
     hydrateAIKeys();
+    // Re-check keys periodically in case admin updates them
+    const interval = setInterval(hydrateAIKeys, 60000);
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -60,9 +73,7 @@ const App: React.FC = () => {
         const theme = await themeRes.json();
         if (settings) setAppSettings(settings);
         if (theme) setGlobalTheme(theme);
-      } catch (e) {
-        // Silent catch for background network errors
-      }
+      } catch (e) { }
     };
     fetchGlobal();
     const interval = setInterval(fetchGlobal, 15000); 
@@ -82,9 +93,7 @@ const App: React.FC = () => {
         } else {
           setProjects([]);
         }
-      } catch (e) { 
-        // Silent catch
-      }
+      } catch (e) { }
     };
     fetchProjects();
   }, [user?.uid, currentPage]);
@@ -106,12 +115,7 @@ const App: React.FC = () => {
             setUser({ ...data, uid: user.uid });
           }
         }
-      } catch (e) {
-        // Only log non-network errors
-        if (e instanceof Error && e.name !== 'TypeError') {
-          console.error("Sync error:", e.message);
-        }
-      }
+      } catch (e) { }
     };
     const interval = setInterval(syncUser, 8000);
     return () => clearInterval(interval);
@@ -130,10 +134,8 @@ const App: React.FC = () => {
           const data = await res.json();
           if (data) {
             let updatedUser = { ...data, uid: savedUid };
-            const isPremium = !!data.premium;
             const today = new Date().toDateString();
-            
-            if (!isPremium && data.last_timer_reset !== today) {
+            if (!data.premium && data.last_timer_reset !== today) {
               updatedUser.remaining_ai_seconds = 600;
               updatedUser.last_timer_reset = today;
               await fetch(`${FIREBASE_CONFIG.databaseURL}/users/${savedUid}.json`, {
@@ -144,12 +146,7 @@ const App: React.FC = () => {
             setUser(updatedUser);
             if (!appSettings?.maintenanceMode) setCurrentPage('dashboard');
           }
-        } catch (e) { 
-          // Do not remove localStorage on network error, only on specific failures
-          if (e instanceof Error && e.name !== 'TypeError') {
-            localStorage.removeItem('user_uid');
-          }
-        }
+        } catch (e) { }
       };
       fetchUser();
     }
@@ -163,8 +160,17 @@ const App: React.FC = () => {
 
   const handleSendMessage = async (text: string) => {
     if (!text.trim() || isGenerating || !user) return;
-    const isPremium = !!user.premium;
     
+    // Explicit check for Global API Key
+    const globalObj = (typeof globalThis !== 'undefined' ? globalThis : window) as any;
+    const currentApiKey = globalObj.process?.env?.API_KEY;
+
+    if (!currentApiKey) {
+      alert("No AI Key found. Please add a Gemini API Key in the Admin Panel > Key Pool section.");
+      return;
+    }
+
+    const isPremium = !!user.premium;
     if (!isPremium && user.remaining_ai_seconds <= 0) {
       alert("Daily AI limit reached!");
       setCurrentPage('premium');
@@ -197,7 +203,6 @@ const App: React.FC = () => {
       setMessages(finalMessages);
       setIsGenerating(false);
 
-      // Save project logic
       const projectData: Omit<ChatProject, 'id'> = {
         name: finalAiContent.slice(0, 30).replace(/[*#]/g, '') + "...",
         toolName: selectedTool || "General AI",
@@ -206,7 +211,6 @@ const App: React.FC = () => {
         customInstructions: selectedTool === 'Custom Pro AI' ? customInstructions : undefined
       };
       
-      // Background save - don't wait/fail the UI if this fails
       fetch(`${FIREBASE_CONFIG.databaseURL}/chat_projects/${user.uid}/${activeProjectId}.json`, {
         method: 'PUT',
         body: JSON.stringify(projectData)
@@ -220,30 +224,22 @@ const App: React.FC = () => {
     } catch (e) { 
       setIsGenerating(false); 
       setMessages(prev => prev.filter(m => m.id !== "ai_temp"));
-      const errMsg = e instanceof Error ? e.message : "Check connection.";
-      alert(`AI System Busy: ${errMsg}`);
+      alert(`AI System Error: ${e instanceof Error ? e.message : "Connection Lost"}`);
     }
   };
 
   const handleDeleteProject = async (projectId: string) => {
     if (!user || !projectId) return;
-    const confirmDelete = window.confirm("Are you sure? This project will be permanently deleted.");
-    if (!confirmDelete) return;
+    if (!window.confirm("Delete this project?")) return;
     setProjects(prev => prev.filter(p => p.id !== projectId));
     try {
-      const response = await fetch(`${FIREBASE_CONFIG.databaseURL}/chat_projects/${user.uid}/${projectId}.json`, {
-        method: 'DELETE'
-      });
-      if (!response.ok) throw new Error("Failed to delete on server");
+      await fetch(`${FIREBASE_CONFIG.databaseURL}/chat_projects/${user.uid}/${projectId}.json`, { method: 'DELETE' });
       if (currentProjectId === projectId) {
         setCurrentProjectId(null);
         setMessages([]);
         setCustomInstructions('');
       }
-    } catch (e) {
-      console.error("Delete error:", e);
-      alert("Error deleting project. Please check your network.");
-    }
+    } catch (e) { alert("Failed to delete."); }
   };
 
   const handleRegenerate = () => {
@@ -256,9 +252,7 @@ const App: React.FC = () => {
     }
   };
 
-  const handleDeleteMessage = (id: string) => {
-    setMessages(prev => prev.filter(m => m.id !== id));
-  };
+  const handleDeleteMessage = (id: string) => setMessages(prev => prev.filter(m => m.id !== id));
 
   const handleToggleTheme = async () => {
     if (!user) return;
@@ -270,12 +264,15 @@ const App: React.FC = () => {
         method: 'PUT', 
         body: JSON.stringify(newTheme) 
       });
-    } catch (e) { /* Background sync error */ }
+    } catch (e) { }
   };
 
   const themeToApply = user?.theme || globalTheme || DEFAULT_DARK_THEME;
 
-  if (appSettings?.maintenanceMode && currentPage !== 'admin') return <MaintenanceScreen theme={themeToApply} appSettings={appSettings} onAdminAccess={() => setCurrentPage('admin')} />;
+  if (appSettings?.maintenanceMode && currentPage !== 'admin') {
+    return <MaintenanceScreen theme={themeToApply} appSettings={appSettings} onAdminAccess={() => setCurrentPage('admin')} />;
+  }
+  
   if (currentPage === 'auth') return <Auth onAuthSuccess={handleAuthSuccess} />;
 
   return (
@@ -300,6 +297,7 @@ const App: React.FC = () => {
               )}
             </div>
             <div className="flex-1 truncate font-bold text-sm text-[var(--text-primary)]">{selectedTool || "AI Developer"}</div>
+            {!isAiReady && <div className="text-[8px] font-black text-yellow-500 animate-pulse uppercase tracking-widest">Hydrating AI...</div>}
           </header>
           
           <ChatInterface 
@@ -310,9 +308,9 @@ const App: React.FC = () => {
             onDeleteMessage={handleDeleteMessage}
             onRegenerate={handleRegenerate}
             onNavigate={setCurrentPage}
+            isAiReady={isAiReady}
           />
 
-          {/* Instruction Modal */}
           {isInstructionModalOpen && (
             <div className="fixed inset-0 z-[150] flex items-center justify-center p-6">
               <div className="absolute inset-0 bg-black/90 backdrop-blur-md" onClick={() => setIsInstructionModalOpen(false)}></div>
@@ -324,14 +322,12 @@ const App: React.FC = () => {
                   <h3 className="text-lg font-black uppercase tracking-tighter">AI Programming</h3>
                   <p className="text-[9px] text-[var(--text-secondary)] font-black uppercase tracking-widest mt-1">Set Custom Logic</p>
                 </div>
-
                 <textarea 
                   placeholder="Define exactly how the AI should behave..."
                   value={customInstructions}
                   onChange={(e) => setCustomInstructions(e.target.value)}
                   className="w-full bg-[var(--bg-primary)] border border-[var(--border)] rounded-2xl p-5 text-sm h-40 outline-none focus:border-[var(--accent)] resize-none custom-scrollbar font-medium"
                 />
-
                 <div className="mt-6 flex flex-col gap-3">
                   <button 
                     onClick={() => {
@@ -347,12 +343,7 @@ const App: React.FC = () => {
                   >
                     Apply Instructions
                   </button>
-                  <button 
-                    onClick={() => setIsInstructionModalOpen(false)}
-                    className="w-full py-4 bg-[var(--bg-secondary)] border border-[var(--border)] text-[var(--text-secondary)] rounded-2xl text-[10px] font-black uppercase"
-                  >
-                    Cancel
-                  </button>
+                  <button onClick={() => setIsInstructionModalOpen(false)} className="w-full py-4 bg-[var(--bg-secondary)] border border-[var(--border)] text-[var(--text-secondary)] rounded-2xl text-[10px] font-black uppercase">Cancel</button>
                 </div>
               </div>
             </div>

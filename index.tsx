@@ -1,15 +1,15 @@
-
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.tsx';
 
-// Polyfill process for browser environments
-if (typeof window !== 'undefined') {
-  if (!(window as any).process) {
-    (window as any).process = { env: {} };
-  } else if (!(window as any).process.env) {
-    (window as any).process.env = {};
-  }
+// Robust Polyfill for process.env in the browser
+// We use globalThis to ensure it's accessible across all module boundaries
+const globalObj = (typeof globalThis !== 'undefined' ? globalThis : window) as any;
+
+if (!globalObj.process) {
+  globalObj.process = { env: {} };
+} else if (!globalObj.process.env) {
+  globalObj.process.env = {};
 }
 
 // Register Service Worker for PWA
