@@ -8,12 +8,14 @@ export const generateAIContentStream = async (
   overrideSystemInstruction?: string
 ) => {
   const globalObj = (typeof globalThis !== 'undefined' ? globalThis : window) as any;
-  const keyPool: string[] = globalObj.process?.env?.API_KEYS || [];
-  
-  if (keyPool.length === 0) {
-    throw new Error("Neural Hub connecting... Please try again.");
-  }
+  const apiKey = globalObj.process?.env?.API_KEY;
 
+  if (!apiKey || apiKey.length < 10) {
+    throw new Error("Neural Hub is initializing. Please try again in 5 seconds.");
+  }
+  
+  const ai = new GoogleGenAI({ apiKey });
+  
   const contents = history.map(h => ({
     role: h.role === 'ai' ? 'model' : 'user',
     parts: [{ text: h.content }]
@@ -28,52 +30,39 @@ export const generateAIContentStream = async (
     ? `STRICT INSTRUCTION: ${overrideSystemInstruction}` 
     : DEV_AI_INSTRUCTIONS;
 
-  let lastError = null;
-  
-  // We loop through the pool. Since you now have a single new key, it will use it directly.
-  for (let i = 0; i < keyPool.length; i++) {
-    const activeKey = keyPool[i];
-    const ai = new GoogleGenAI({ apiKey: activeKey });
-    
-    try {
-      const responseStream = await ai.models.generateContentStream({
-        model: 'gemini-3-flash-preview',
-        contents: contents as any,
-        config: {
-          systemInstruction: finalInstruction,
-          temperature: 0.7,
-          topP: 0.95,
-          topK: 64
-        },
-      });
+  // Optimized for gemini-3-flash-preview as per system requirements
+  const modelToUse = 'gemini-3-flash-preview';
 
-      let fullText = "";
-      for await (const chunk of responseStream) {
-        const chunkText = chunk.text || "";
-        if (chunkText) {
-          fullText += chunkText;
-          onChunk(fullText);
-        }
-      }
-      
-      // Successfully generated content with the new key
-      globalObj.process.env.API_KEY = activeKey;
-      return fullText;
+  try {
+    const responseStream = await ai.models.generateContentStream({
+      model: modelToUse,
+      contents: contents as any,
+      config: {
+        systemInstruction: finalInstruction,
+        temperature: 0.7,
+        topP: 0.95,
+        topK: 64
+      },
+    });
 
-    } catch (error: any) {
-      lastError = error;
-      const msg = error?.message || error?.toString() || "";
-      
-      // Handle quota or permission errors by attempting rotation (if applicable)
-      if (msg.includes("429") || msg.includes("403") || msg.includes("API key")) {
-        console.warn(`AI Engine ${i+1} reporting busy state. Retrying sequence...`);
-        continue; 
+    let fullText = "";
+    for await (const chunk of responseStream) {
+      const chunkText = chunk.text || "";
+      if (chunkText) {
+        fullText += chunkText;
+        onChunk(fullText);
       }
-      
-      throw error;
     }
-  }
+    return fullText;
 
-  const finalMsg = lastError?.message || lastError?.toString() || "Server Congestion";
-  throw new Error(finalMsg);
+  } catch (error: any) {
+    console.error("AI Generation Critical Error:", error);
+    const msg = error?.message || "Connection to Neural Core failed.";
+    
+    if (msg.includes("403") || msg.includes("API key")) {
+      throw new Error("AI Access Denied: The API Key may have been disabled. Please contact support.");
+    }
+    
+    throw new Error(msg);
+  }
 };
