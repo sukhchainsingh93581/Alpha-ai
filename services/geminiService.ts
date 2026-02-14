@@ -1,4 +1,3 @@
-
 import { GoogleGenAI } from "@google/genai";
 import { DEV_AI_INSTRUCTIONS } from "../constants";
 
@@ -31,7 +30,7 @@ export const generateAIContentStream = async (
     ? `STRICT INSTRUCTION: ${overrideSystemInstruction}` 
     : DEV_AI_INSTRUCTIONS;
 
-  // Using gemini-3-flash-preview for speed and better quota management
+  // Using gemini-3-flash-preview for high capacity and stability
   const modelToUse = 'gemini-3-flash-preview';
 
   try {
@@ -56,7 +55,8 @@ export const generateAIContentStream = async (
     }
     return fullText;
   } catch (error: any) {
-    console.error("AI Error:", error);
-    throw error;
+    console.error("AI Generation Error:", error);
+    const msg = error?.message || error?.toString() || "Unknown AI error";
+    throw new Error(msg);
   }
 };

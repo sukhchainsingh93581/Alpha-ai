@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { User, Message, AppSettings, UserTheme, ChatProject } from './types.ts';
 import { FIREBASE_CONFIG, DEFAULT_DARK_THEME, DEFAULT_LIGHT_THEME } from './constants.ts';
@@ -28,9 +27,9 @@ const App: React.FC = () => {
   const [customInstructions, setCustomInstructions] = useState<string>('');
   const [isInstructionModalOpen, setIsInstructionModalOpen] = useState(false);
 
-  // Use the verified key provided by the user: AIzaSyCjYaNwa0Yilfae9OK0cCZv_W5dq-y3W6I
+  // Use the verified key provided by the user: AIzaSyDVMQNMpurOYbwknOMG5BMq2uvVEX5tpDI
   const getPrimaryApiKey = () => {
-    return "AIzaSyCjYaNwa0Yil" + "fae9OK0cCZv_W5dq-y3W6I";
+    return "AIzaSyDVMQNMpurOYbwk" + "nOMG5BMq2uvVEX5tpDI";
   };
 
   // Initialize AI System
@@ -155,8 +154,14 @@ const App: React.FC = () => {
       setMessages(prev => prev.filter(m => m.id !== "ai_temp"));
       
       const errorMessage = e?.message || "Connection Error";
-      // Removed the disruptive 'Security Alert' alert. Just show a generic error if it persists.
-      alert(`AI System Busy: Please try again in a moment.`);
+      
+      if (errorMessage.includes("429")) {
+        alert("AI Limit: Too many requests. Please wait 10 seconds and try again.");
+      } else if (errorMessage.includes("403") || errorMessage.includes("API key")) {
+        alert("API Error: Please check if the API key is active in Google Cloud.");
+      } else {
+        alert(`AI Error: ${errorMessage}`);
+      }
       console.error("AI Error details:", errorMessage);
     }
   };
