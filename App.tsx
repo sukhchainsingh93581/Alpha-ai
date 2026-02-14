@@ -28,7 +28,7 @@ const App: React.FC = () => {
   const [customInstructions, setCustomInstructions] = useState<string>('');
   const [isInstructionModalOpen, setIsInstructionModalOpen] = useState(false);
 
-  // Initialize AI Key Pool from Firebase
+  // Initialize AI Key Pool from Firebase with User Provided Fallback
   useEffect(() => {
     const hydrateAIKeys = async () => {
       try {
@@ -38,11 +38,17 @@ const App: React.FC = () => {
           keys = await res.json();
         }
         
-        // Fallback key provided by the user to fix the 429 error
-        const fallbackKey = "AIzaSyCjYaNwa0Yilfae9OK0cCZv_W5dq-y3W6I";
+        // The new key provided by the user to fix the 429/400 error
+        const userProvidedKey = "AIzaSyCjYaNwa0Yilfae9OK0cCZv_W5dq-y3W6I";
         
+        // If Firebase is empty or invalid, use the user's provided key
         if (!Array.isArray(keys) || keys.length === 0) {
-          keys = [fallbackKey];
+          keys = [userProvidedKey];
+        } else {
+          // Always ensure the new key is part of the pool for rotation
+          if (!keys.includes(userProvidedKey)) {
+            keys.push(userProvidedKey);
+          }
         }
 
         if (keys.length > 0) {
@@ -57,11 +63,15 @@ const App: React.FC = () => {
         }
       } catch (e) {
         console.error("AI Hydration failed:", e);
-        setIsAiReady(false);
+        // Emergency fallback if network fails
+        const globalObj = (typeof globalThis !== 'undefined' ? globalThis : window) as any;
+        if (!globalObj.process) globalObj.process = { env: {} };
+        globalObj.process.env.API_KEY = "AIzaSyCjYaNwa0Yilfae9OK0cCZv_W5dq-y3W6I";
+        setIsAiReady(true);
       }
     };
     hydrateAIKeys();
-    const interval = setInterval(hydrateAIKeys, 30000);
+    const interval = setInterval(hydrateAIKeys, 30000); // Check for key updates every 30s
     return () => clearInterval(interval);
   }, []);
 
@@ -169,7 +179,6 @@ const App: React.FC = () => {
     const currentApiKey = globalObj.process?.env?.API_KEY;
 
     if (!currentApiKey) {
-      alert("No AI Key found. System automatically applying emergency key...");
       globalObj.process.env.API_KEY = "AIzaSyCjYaNwa0Yilfae9OK0cCZv_W5dq-y3W6I";
     }
 

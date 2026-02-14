@@ -31,10 +31,12 @@ export const generateAIContentStream = async (
     ? `STRICT INSTRUCTION: ${overrideSystemInstruction}` 
     : DEV_AI_INSTRUCTIONS;
 
-  // Use Flash for standard tasks to avoid Quota 429 errors, use Pro for complex tool requests
-  const modelToUse = (prompt.toLowerCase().includes('complex') || prompt.toLowerCase().includes('generate complete app')) 
-    ? 'gemini-3-pro-preview' 
-    : 'gemini-3-flash-preview';
+  /**
+   * FIX: 429 RESOURCE EXHAUSTED
+   * Defaulting to gemini-3-flash-preview because gemini-3-pro-preview 
+   * has extremely strict rate limits on the free tier.
+   */
+  const modelToUse = 'gemini-3-flash-preview';
 
   try {
     const responseStream = await ai.models.generateContentStream({
@@ -42,7 +44,9 @@ export const generateAIContentStream = async (
       contents: contents as any,
       config: {
         systemInstruction: finalInstruction,
-        temperature: overrideSystemInstruction ? 0.3 : 0.8,
+        temperature: overrideSystemInstruction ? 0.3 : 0.7,
+        topP: 0.95,
+        topK: 40
       },
     });
 
@@ -57,6 +61,7 @@ export const generateAIContentStream = async (
     return fullText;
   } catch (error) {
     console.error("Gemini Stream Error:", error);
+    // If even Flash fails with 429, it might be a temporary IP rate limit
     throw error;
   }
 };
