@@ -1,3 +1,4 @@
+
 import { GoogleGenAI } from "@google/genai";
 import { DEV_AI_INSTRUCTIONS } from "../constants";
 
@@ -11,7 +12,7 @@ export const generateAIContentStream = async (
   const apiKey = globalObj.process?.env?.API_KEY;
 
   if (!apiKey) {
-    throw new Error("Missing AI API Key. System is attempting to recover. Please try again.");
+    throw new Error("Initializing AI Engine... Please wait.");
   }
   
   const ai = new GoogleGenAI({ apiKey });
@@ -30,7 +31,7 @@ export const generateAIContentStream = async (
     ? `STRICT INSTRUCTION: ${overrideSystemInstruction}` 
     : DEV_AI_INSTRUCTIONS;
 
-  // Use the high-capacity gemini-3-flash-preview for the best experience
+  // Use Flash for high reliability and lower quota pressure
   const modelToUse = 'gemini-3-flash-preview';
 
   try {
@@ -41,7 +42,7 @@ export const generateAIContentStream = async (
         systemInstruction: finalInstruction,
         temperature: overrideSystemInstruction ? 0.3 : 0.7,
         topP: 0.95,
-        topK: 64
+        topK: 40
       },
     });
 
@@ -55,15 +56,15 @@ export const generateAIContentStream = async (
     }
     return fullText;
   } catch (error: any) {
-    console.error("Gemini Stream Error:", error);
+    console.error("AI Stream Failure:", error);
     
     const errStr = error?.toString() || "";
     if (errStr.includes("403") || errStr.includes("leaked")) {
-        throw new Error("SECURITY_BLOCK: Your API key was reported as leaked. The system is auto-switching to a backup. Please wait 3 seconds and retry.");
+        throw new Error("CONNECTION_BLOCK: Key marked as leaked. The system is re-initializing. Please try sending again.");
     }
     
     if (errStr.includes("429")) {
-        throw new Error("QUOTA_LIMIT: The current AI key is exhausted. Switching keys, please retry.");
+        throw new Error("QUOTA_FULL: Please wait a few seconds before sending the next message.");
     }
 
     throw error;
