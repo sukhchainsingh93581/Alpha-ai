@@ -28,9 +28,9 @@ export const generateAIContentStream = async (
     ? `STRICT INSTRUCTION: ${overrideSystemInstruction}` 
     : DEV_AI_INSTRUCTIONS;
 
-  // Try each key in the pool if a quota error occurs
   let lastError = null;
   
+  // We loop through the pool. Since you now have a single new key, it will use it directly.
   for (let i = 0; i < keyPool.length; i++) {
     const activeKey = keyPool[i];
     const ai = new GoogleGenAI({ apiKey: activeKey });
@@ -56,7 +56,7 @@ export const generateAIContentStream = async (
         }
       }
       
-      // If we got here, it worked! Update the "main" key for next time
+      // Successfully generated content with the new key
       globalObj.process.env.API_KEY = activeKey;
       return fullText;
 
@@ -64,21 +64,16 @@ export const generateAIContentStream = async (
       lastError = error;
       const msg = error?.message || error?.toString() || "";
       
-      // If it's a quota error (429) or permission error (403), try the next key
+      // Handle quota or permission errors by attempting rotation (if applicable)
       if (msg.includes("429") || msg.includes("403") || msg.includes("API key")) {
-        console.warn(`Key ${i+1} failed or limited. Rotating to next engine...`);
+        console.warn(`AI Engine ${i+1} reporting busy state. Retrying sequence...`);
         continue; 
       }
       
-      // For other errors, just throw immediately
       throw error;
     }
   }
 
-  // If we've looped through all keys and still have an error
   const finalMsg = lastError?.message || lastError?.toString() || "Server Congestion";
-  if (finalMsg.includes("429")) {
-    throw new Error("Daily Limit Reached: All AI Engines are at capacity. Please wait a few hours.");
-  }
   throw new Error(finalMsg);
 };
