@@ -29,14 +29,14 @@ export const generateAIContentStream = async (
     : DEV_AI_INSTRUCTIONS;
 
   try {
-    // Upgraded to gemini-3-pro-preview for complex coding tasks as per task-specific model guidelines
+    // Upgraded to gemini-3-pro-preview for complex coding tasks
+    // Removed thinkingConfig { thinkingBudget: 0 } as it is invalid for the Pro series models
     const responseStream = await ai.models.generateContentStream({
       model: 'gemini-3-pro-preview',
       contents: contents as any,
       config: {
         systemInstruction: finalInstruction,
         temperature: overrideSystemInstruction ? 0.3 : 0.8,
-        thinkingConfig: { thinkingBudget: 0 } 
       },
     });
 

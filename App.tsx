@@ -28,6 +28,26 @@ const App: React.FC = () => {
   const [customInstructions, setCustomInstructions] = useState<string>('');
   const [isInstructionModalOpen, setIsInstructionModalOpen] = useState(false);
 
+  // Initialize AI Key Pool from Firebase
+  useEffect(() => {
+    const hydrateAIKeys = async () => {
+      try {
+        const res = await fetch(`${FIREBASE_CONFIG.databaseURL}/ai_api_keys.json`);
+        if (!res.ok) return;
+        const keys = await res.json();
+        if (keys && Array.isArray(keys) && keys.length > 0) {
+          // Select a key from the pool and set it to process.env for the Gemini SDK
+          const activeKey = keys[Math.floor(Math.random() * keys.length)];
+          (window as any).process.env.API_KEY = activeKey;
+          console.log("AI Engine Initialized successfully.");
+        }
+      } catch (e) {
+        console.error("AI Key Hydration failed:", e);
+      }
+    };
+    hydrateAIKeys();
+  }, []);
+
   useEffect(() => {
     const fetchGlobal = async () => {
       try {

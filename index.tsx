@@ -1,11 +1,15 @@
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.tsx';
 
-// Polyfill process for browser environments that don't have it defined
-// Fixed: Access window.process via 'any' cast to avoid TypeScript property error
-if (typeof window !== 'undefined' && !(window as any).process) {
-  (window as any).process = { env: {} };
+// Polyfill process for browser environments
+if (typeof window !== 'undefined') {
+  if (!(window as any).process) {
+    (window as any).process = { env: {} };
+  } else if (!(window as any).process.env) {
+    (window as any).process.env = {};
+  }
 }
 
 // Register Service Worker for PWA
