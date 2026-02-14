@@ -33,21 +33,26 @@ const App: React.FC = () => {
     const hydrateAIKeys = async () => {
       try {
         const res = await fetch(`${FIREBASE_CONFIG.databaseURL}/ai_api_keys.json`);
-        if (!res.ok) throw new Error("Could not fetch keys");
-        const keys = await res.json();
+        let keys = [];
+        if (res.ok) {
+          keys = await res.json();
+        }
         
-        if (keys && Array.isArray(keys) && keys.length > 0) {
-          // Select a random key from the pool provided by Admin
+        // Fallback key provided by the user to fix the 429 error
+        const fallbackKey = "AIzaSyCjYaNwa0Yilfae9OK0cCZv_W5dq-y3W6I";
+        
+        if (!Array.isArray(keys) || keys.length === 0) {
+          keys = [fallbackKey];
+        }
+
+        if (keys.length > 0) {
           const activeKey = keys[Math.floor(Math.random() * keys.length)];
-          // Set to global scope so services can pick it up
           const globalObj = (typeof globalThis !== 'undefined' ? globalThis : window) as any;
           if (!globalObj.process) globalObj.process = { env: {} };
           globalObj.process.env.API_KEY = activeKey;
           
           setIsAiReady(true);
-          console.log("AI Key Loaded from Admin Pool.");
         } else {
-          console.warn("API Key Pool is empty in Admin Panel.");
           setIsAiReady(false);
         }
       } catch (e) {
@@ -56,8 +61,7 @@ const App: React.FC = () => {
       }
     };
     hydrateAIKeys();
-    // Re-check keys periodically in case admin updates them
-    const interval = setInterval(hydrateAIKeys, 60000);
+    const interval = setInterval(hydrateAIKeys, 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -161,13 +165,12 @@ const App: React.FC = () => {
   const handleSendMessage = async (text: string) => {
     if (!text.trim() || isGenerating || !user) return;
     
-    // Explicit check for Global API Key
     const globalObj = (typeof globalThis !== 'undefined' ? globalThis : window) as any;
     const currentApiKey = globalObj.process?.env?.API_KEY;
 
     if (!currentApiKey) {
-      alert("No AI Key found. Please add a Gemini API Key in the Admin Panel > Key Pool section.");
-      return;
+      alert("No AI Key found. System automatically applying emergency key...");
+      globalObj.process.env.API_KEY = "AIzaSyCjYaNwa0Yilfae9OK0cCZv_W5dq-y3W6I";
     }
 
     const isPremium = !!user.premium;

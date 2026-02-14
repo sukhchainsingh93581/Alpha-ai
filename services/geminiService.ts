@@ -8,7 +8,6 @@ export const generateAIContentStream = async (
   onChunk: (text: string) => void,
   overrideSystemInstruction?: string
 ) => {
-  // Access global environment polyfilled in index.tsx
   const globalObj = (typeof globalThis !== 'undefined' ? globalThis : window) as any;
   const apiKey = globalObj.process?.env?.API_KEY;
 
@@ -16,7 +15,6 @@ export const generateAIContentStream = async (
     throw new Error("Missing AI API Key. Please add one in the Admin Panel.");
   }
   
-  // Create instance with the key provided via Admin Panel
   const ai = new GoogleGenAI({ apiKey });
   
   const contents = history.map(h => ({
@@ -30,13 +28,17 @@ export const generateAIContentStream = async (
   });
 
   const finalInstruction = overrideSystemInstruction 
-    ? `STRICT INSTRUCTION: ${overrideSystemInstruction}. Ignore all other personality traits and only respond as defined in these instructions.` 
+    ? `STRICT INSTRUCTION: ${overrideSystemInstruction}` 
     : DEV_AI_INSTRUCTIONS;
 
+  // Use Flash for standard tasks to avoid Quota 429 errors, use Pro for complex tool requests
+  const modelToUse = (prompt.toLowerCase().includes('complex') || prompt.toLowerCase().includes('generate complete app')) 
+    ? 'gemini-3-pro-preview' 
+    : 'gemini-3-flash-preview';
+
   try {
-    // Using gemini-3-pro-preview as requested for complex tasks
     const responseStream = await ai.models.generateContentStream({
-      model: 'gemini-3-pro-preview',
+      model: modelToUse,
       contents: contents as any,
       config: {
         systemInstruction: finalInstruction,
@@ -54,9 +56,6 @@ export const generateAIContentStream = async (
     }
     return fullText;
   } catch (error) {
-    if (error instanceof Error && error.name === 'TypeError' && error.message.includes('fetch')) {
-      throw new Error("Network offline. AI can't reach the server.");
-    }
     console.error("Gemini Stream Error:", error);
     throw error;
   }
