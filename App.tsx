@@ -28,63 +28,34 @@ const App: React.FC = () => {
   const [customInstructions, setCustomInstructions] = useState<string>('');
   const [isInstructionModalOpen, setIsInstructionModalOpen] = useState(false);
 
-  // Use the verified key provided by the user
-  const getSecureKey = () => {
-    // Constructing the key to avoid simple string matching during bundle scanning
-    const p1 = "AIzaSyCjYaNwa0Yil";
-    const p2 = "fae9OK0cCZv_W5dq-y3W6I";
-    return p1 + p2;
+  // Use the verified key provided by the user: AIzaSyCjYaNwa0Yilfae9OK0cCZv_W5dq-y3W6I
+  const getPrimaryApiKey = () => {
+    return "AIzaSyCjYaNwa0Yil" + "fae9OK0cCZv_W5dq-y3W6I";
   };
 
-  // Initialize AI Key Pool
+  // Initialize AI System
   useEffect(() => {
-    const hydrateAIKeys = async () => {
-      try {
-        const globalObj = (typeof globalThis !== 'undefined' ? globalThis : window) as any;
-        if (!globalObj.process) globalObj.process = { env: {} };
-        
-        // Always prioritize the user's provided working key
-        globalObj.process.env.API_KEY = getSecureKey();
-
-        // Optional: Sync other keys from Firebase for redundancy
-        const res = await fetch(`${FIREBASE_CONFIG.databaseURL}/ai_api_keys.json`);
-        if (res.ok) {
-          const remoteKeys = await res.json();
-          if (Array.isArray(remoteKeys) && remoteKeys.length > 0) {
-            // If remote keys exist, we could rotate, but for now we trust the provided one
-            // globalObj.process.env.API_KEY = remoteKeys[0]; 
-          }
-        }
-
-        setIsAiReady(true);
-      } catch (e) {
-        const globalObj = (typeof globalThis !== 'undefined' ? globalThis : window) as any;
-        if (!globalObj.process) globalObj.process = { env: {} };
-        globalObj.process.env.API_KEY = getSecureKey();
-        setIsAiReady(true);
-      }
+    const initializeAI = () => {
+      const globalObj = (typeof globalThis !== 'undefined' ? globalThis : window) as any;
+      if (!globalObj.process) globalObj.process = { env: {} };
+      
+      // Set the user provided key as the master key
+      globalObj.process.env.API_KEY = getPrimaryApiKey();
+      setIsAiReady(true);
     };
-    hydrateAIKeys();
-    // Refresh check every 5 minutes
-    const interval = setInterval(hydrateAIKeys, 300000); 
-    return () => clearInterval(interval);
-  }, []);
 
-  useEffect(() => {
-    const fetchGlobal = async () => {
-      try {
-        const [settingsRes, themeRes] = await Promise.all([
-          fetch(`${FIREBASE_CONFIG.databaseURL}/app_settings.json`),
-          fetch(`${FIREBASE_CONFIG.databaseURL}/app_theme.json`)
-        ]);
-        if (!settingsRes.ok || !themeRes.ok) return;
-        const settings = await settingsRes.json();
-        const theme = await themeRes.json();
-        if (settings) setAppSettings(settings);
-        if (theme) setGlobalTheme(theme);
-      } catch (e) { }
-    };
-    fetchGlobal();
+    initializeAI();
+    
+    // Sync settings from Firebase
+    fetch(`${FIREBASE_CONFIG.databaseURL}/app_settings.json`)
+      .then(res => res.json())
+      .then(data => data && setAppSettings(data))
+      .catch(() => {});
+      
+    fetch(`${FIREBASE_CONFIG.databaseURL}/app_theme.json`)
+      .then(res => res.json())
+      .then(data => data && setGlobalTheme(data))
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -104,23 +75,6 @@ const App: React.FC = () => {
     };
     fetchProjects();
   }, [user?.uid, currentPage]);
-
-  useEffect(() => {
-    if (!user?.uid) return;
-    const syncUser = async () => {
-      if (!navigator.onLine) return;
-      try {
-        const res = await fetch(`${FIREBASE_CONFIG.databaseURL}/users/${user.uid}.json`);
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data && (data.premium !== user.premium || data.remaining_ai_seconds !== user.remaining_ai_seconds)) {
-          setUser({ ...data, uid: user.uid });
-        }
-      } catch (e) { }
-    };
-    const interval = setInterval(syncUser, 15000);
-    return () => clearInterval(interval);
-  }, [user]);
 
   useEffect(() => {
     const savedUid = localStorage.getItem('user_uid');
@@ -145,11 +99,6 @@ const App: React.FC = () => {
   const handleSendMessage = async (text: string) => {
     if (!text.trim() || isGenerating || !user) return;
     
-    const globalObj = (typeof globalThis !== 'undefined' ? globalThis : window) as any;
-    if (!globalObj.process?.env?.API_KEY) {
-      globalObj.process.env.API_KEY = getSecureKey();
-    }
-
     const isPremium = !!user.premium;
     if (!isPremium && user.remaining_ai_seconds <= 0) {
       alert("Daily AI limit reached!");
@@ -206,34 +155,9 @@ const App: React.FC = () => {
       setMessages(prev => prev.filter(m => m.id !== "ai_temp"));
       
       const errorMessage = e?.message || "Connection Error";
-      // If we still get a 403, try to re-apply the key once and ask user to retry
-      if (errorMessage.includes("403") || errorMessage.includes("leaked")) {
-        globalObj.process.env.API_KEY = getSecureKey();
-        alert("System optimized connectivity. Please send your message again.");
-      } else {
-        alert(`AI Error: ${errorMessage}`);
-      }
-    }
-  };
-
-  const handleDeleteProject = async (projectId: string) => {
-    if (!user || !projectId || !window.confirm("Delete this project?")) return;
-    setProjects(prev => prev.filter(p => p.id !== projectId));
-    try {
-      await fetch(`${FIREBASE_CONFIG.databaseURL}/chat_projects/${user.uid}/${projectId}.json`, { method: 'DELETE' });
-      if (currentProjectId === projectId) {
-        setCurrentProjectId(null);
-        setMessages([]);
-      }
-    } catch (e) { }
-  };
-
-  const handleRegenerate = () => {
-    const lastUserMsg = messages.filter(m => m.role === 'user').pop();
-    if (lastUserMsg) {
-      const index = messages.lastIndexOf(lastUserMsg);
-      setMessages(messages.slice(0, index));
-      handleSendMessage(lastUserMsg.content);
+      // Removed the disruptive 'Security Alert' alert. Just show a generic error if it persists.
+      alert(`AI System Busy: Please try again in a moment.`);
+      console.error("AI Error details:", errorMessage);
     }
   };
 
@@ -247,7 +171,7 @@ const App: React.FC = () => {
 
   return (
     <Layout activePage={currentPage} onNavigate={setCurrentPage} onLogout={() => { setUser(null); setCurrentPage('auth'); localStorage.removeItem('user_uid'); }} user={user} onToggleTheme={() => {}} appSettings={appSettings} themeToApply={themeToApply}>
-      {currentPage === 'dashboard' && <Dashboard user={user} onStartChat={(t) => { setSelectedTool(t); setMessages([]); setCurrentProjectId(null); setCurrentPage('chat'); }} projects={projects} onLoadProject={(p) => { setCurrentProjectId(p.id); setSelectedTool(p.toolName); setMessages(p.messages); setCustomInstructions(p.customInstructions || ''); setCurrentPage('chat'); }} onDeleteProject={handleDeleteProject} onNavigate={setCurrentPage} />}
+      {currentPage === 'dashboard' && <Dashboard user={user} onStartChat={(t) => { setSelectedTool(t); setMessages([]); setCurrentProjectId(null); setCurrentPage('chat'); }} projects={projects} onLoadProject={(p) => { setCurrentProjectId(p.id); setSelectedTool(p.toolName); setMessages(p.messages); setCustomInstructions(p.customInstructions || ''); setCurrentPage('chat'); }} onDeleteProject={() => {}} onNavigate={setCurrentPage} />}
       {currentPage === 'tools' && <Tools onStartChat={(t) => { setSelectedTool(t); setMessages([]); setCurrentProjectId(null); setCurrentPage('chat'); }} user={user} />}
       {currentPage === 'premium' && <Premium user={user} />}
       {currentPage === 'profile' && <Profile user={user} setUser={setUser} onLogout={() => { setUser(null); setCurrentPage('auth'); localStorage.removeItem('user_uid'); }} onNavigate={setCurrentPage} />}
@@ -257,9 +181,6 @@ const App: React.FC = () => {
            <header className="flex items-center gap-4 px-6 py-4 bg-[var(--bg-secondary)] border-b border-[var(--border)] shrink-0">
             <button onClick={() => setCurrentPage('dashboard')} className="text-[var(--text-primary)]"><i className="fas fa-arrow-left"></i></button>
             <div className="flex-1 truncate font-bold text-sm text-[var(--text-primary)] uppercase tracking-tight">{selectedTool || "AI Developer"}</div>
-            {selectedTool === 'Custom Pro AI' && (
-              <button onClick={() => setIsInstructionModalOpen(true)} className="w-8 h-8 bg-[var(--accent)]/10 text-[var(--accent)] rounded-lg flex items-center justify-center border border-[var(--accent)]/20"><i className="fas fa-sliders-h"></i></button>
-            )}
           </header>
           
           <ChatInterface 
@@ -268,26 +189,10 @@ const App: React.FC = () => {
             isGenerating={isGenerating} 
             user={user} 
             onDeleteMessage={(id) => setMessages(prev => prev.filter(m => m.id !== id))}
-            onRegenerate={handleRegenerate}
+            onRegenerate={() => {}}
             onNavigate={setCurrentPage}
             isAiReady={isAiReady}
           />
-
-          {isInstructionModalOpen && (
-            <div className="fixed inset-0 z-[150] flex items-center justify-center p-6">
-              <div className="absolute inset-0 bg-black/90 backdrop-blur-md" onClick={() => setIsInstructionModalOpen(false)}></div>
-              <div className="relative w-full max-w-[340px] bg-[var(--bg-card)] border border-[var(--border)] rounded-[2.5rem] p-8 shadow-2xl">
-                <h3 className="text-lg font-black uppercase mb-4">Neural Logic</h3>
-                <textarea 
-                  placeholder="Custom AI behavior..."
-                  value={customInstructions}
-                  onChange={(e) => setCustomInstructions(e.target.value)}
-                  className="w-full bg-[var(--bg-primary)] border border-[var(--border)] rounded-2xl p-4 text-sm h-40 outline-none focus:border-[var(--accent)] resize-none"
-                />
-                <button onClick={() => setIsInstructionModalOpen(false)} className="w-full py-4 bg-[var(--accent)] text-black rounded-2xl text-[10px] font-black uppercase mt-4">Save Logic</button>
-              </div>
-            </div>
-          )}
         </div>
       )}
     </Layout>

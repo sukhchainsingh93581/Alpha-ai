@@ -12,7 +12,7 @@ export const generateAIContentStream = async (
   const apiKey = globalObj.process?.env?.API_KEY;
 
   if (!apiKey) {
-    throw new Error("Initializing AI Engine... Please wait.");
+    throw new Error("AI Engine initializing...");
   }
   
   const ai = new GoogleGenAI({ apiKey });
@@ -31,7 +31,7 @@ export const generateAIContentStream = async (
     ? `STRICT INSTRUCTION: ${overrideSystemInstruction}` 
     : DEV_AI_INSTRUCTIONS;
 
-  // Use Flash for high reliability and lower quota pressure
+  // Using gemini-3-flash-preview for speed and better quota management
   const modelToUse = 'gemini-3-flash-preview';
 
   try {
@@ -40,9 +40,9 @@ export const generateAIContentStream = async (
       contents: contents as any,
       config: {
         systemInstruction: finalInstruction,
-        temperature: overrideSystemInstruction ? 0.3 : 0.7,
+        temperature: 0.7,
         topP: 0.95,
-        topK: 40
+        topK: 64
       },
     });
 
@@ -56,17 +56,7 @@ export const generateAIContentStream = async (
     }
     return fullText;
   } catch (error: any) {
-    console.error("AI Stream Failure:", error);
-    
-    const errStr = error?.toString() || "";
-    if (errStr.includes("403") || errStr.includes("leaked")) {
-        throw new Error("CONNECTION_BLOCK: Key marked as leaked. The system is re-initializing. Please try sending again.");
-    }
-    
-    if (errStr.includes("429")) {
-        throw new Error("QUOTA_FULL: Please wait a few seconds before sending the next message.");
-    }
-
+    console.error("AI Error:", error);
     throw error;
   }
 };
