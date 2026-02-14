@@ -36,6 +36,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onExit }) => {
       const data = await Promise.all(responses.map(r => r.json()));
 
       if (data[0]) setUsers(Object.keys(data[0]).map(uid => ({ ...data[0][uid], uid })));
+      else setUsers([]);
+      
       if (data[1]) setPremiumRequests(Object.keys(data[1]).map(id => ({ ...data[1][id], id })));
       if (data[2]) setAppSettings(data[2]);
       if (data[3]) setAppTheme(data[3]);
@@ -59,6 +61,74 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onExit }) => {
       });
       fetchData();
     } catch (e) { alert("Sync Failed"); }
+  };
+
+  const handleEditUser = async (u: User) => {
+    const newName = prompt("Edit Username:", u.username);
+    if (newName === null) return;
+
+    const currentPremiumStatus = !!u.premium;
+    const wantToToggle = confirm(`Current Rank: ${currentPremiumStatus ? 'PREMIUM' : 'FREE'}\n\nDo you want to ${currentPremiumStatus ? 'REMOVE' : 'GRANT'} Premium access?`);
+    
+    let patchData: any = { username: newName };
+
+    if (wantToToggle) {
+      if (!currentPremiumStatus) {
+        // GRANTING PREMIUM
+        const planName = prompt("Enter Plan Name (e.g., Studio Elite):", "Studio Elite");
+        const days = prompt("Duration in Days (e.g., 30):", "30");
+        const expiry = new Date();
+        expiry.setDate(expiry.getDate() + Number(days || 30));
+        
+        patchData.premium = true;
+        patchData.premium_plan = planName || "Studio Elite";
+        patchData.premium_expiry_date = expiry.toISOString();
+        patchData.premium_start_date = new Date().toISOString();
+      } else {
+        // REMOVING PREMIUM
+        patchData.premium = false;
+        patchData.premium_plan = null;
+        patchData.premium_expiry_date = null;
+        patchData.premium_start_date = null;
+      }
+    }
+
+    try {
+      const response = await fetch(`${FIREBASE_CONFIG.databaseURL}/users/${u.uid}.json`, {
+        method: 'PATCH',
+        body: JSON.stringify(patchData)
+      });
+      if (response.ok) {
+        alert("User updated successfully!");
+        fetchData();
+      } else {
+        alert("Failed to update user.");
+      }
+    } catch (error) {
+      console.error("Update Error:", error);
+      alert("Network Error during update.");
+    }
+  };
+
+  const handleDeleteUser = async (u: User) => {
+    if (!confirm(`⚠️ WARNING: Are you sure you want to delete ${u.username} (${u.email}) permanently? This cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${FIREBASE_CONFIG.databaseURL}/users/${u.uid}.json`, {
+        method: 'DELETE'
+      });
+      if (response.ok) {
+        alert("User deleted from database.");
+        fetchData();
+      } else {
+        alert("Failed to delete user.");
+      }
+    } catch (error) {
+      console.error("Delete Error:", error);
+      alert("Network Error during deletion.");
+    }
   };
 
   const sidebarItems = [
@@ -101,7 +171,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onExit }) => {
 
   return (
     <div className="flex flex-col h-screen bg-[#070312] text-white overflow-hidden font-sans">
-      {/* 3-Line Menu Overlay */}
+      {/* Sidebar Menu Overlay */}
       {isSidebarOpen && (
         <div className="fixed inset-0 z-[200] flex animate-in fade-in duration-300">
           <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsSidebarOpen(false)}></div>
@@ -156,10 +226,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onExit }) => {
             </div>
             <div className="bg-[#151525] border border-white/5 rounded-3xl p-5 shadow-xl">
                <div className="flex justify-between items-center mb-4">
-                  <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest">Active AI API Key</p>
+                  <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest">Active AI API Key Pool</p>
                   <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
                </div>
-               <p className="text-[10px] font-mono text-[#00f2ff] truncate bg-black/20 p-3 rounded-xl border border-white/5">{aiKeys.split('\n')[0] || "No API Key configured in Key Pool"}</p>
+               <p className="text-[10px] font-mono text-[#00f2ff] truncate bg-black/20 p-3 rounded-xl border border-white/5">{aiKeys.split('\n')[0] || "No keys available"}</p>
             </div>
 
             <div className="bg-[#151525] border border-white/5 rounded-[2.5rem] p-6 shadow-xl">
@@ -180,23 +250,41 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onExit }) => {
 
         {activeTab === 'users' && (
           <div className="space-y-3 animate-in slide-in-from-bottom">
-            {users.map(u => (
-              <div key={u.uid} className="bg-[#151525] border border-white/5 rounded-2xl p-5 flex justify-between items-center shadow-lg">
-                <div className="truncate pr-4">
-                  <h4 className="font-black text-xs uppercase truncate mb-0.5">{u.username}</h4>
-                  <p className="text-[8px] text-gray-500 uppercase font-mono truncate">{u.email}</p>
+            <div className="px-2 mb-2 flex justify-between items-center">
+              <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Active Accounts ({users.length})</span>
+            </div>
+            {users.length === 0 ? (
+                <div className="text-center py-20 opacity-30 text-[10px] font-black uppercase">No Users Found</div>
+            ) : (
+                users.map(u => (
+                <div key={u.uid} className="bg-[#151525] border border-white/5 rounded-2xl p-5 flex justify-between items-center shadow-lg hover:border-[#00f2ff]/20 transition-all">
+                    <div className="truncate pr-4">
+                    <div className="flex items-center gap-2 mb-1">
+                        <h4 className="font-black text-xs uppercase truncate">{u.username}</h4>
+                        {u.premium && <span className="text-[7px] bg-[#ff00c8]/10 text-[#ff00c8] px-1.5 py-0.5 rounded border border-[#ff00c8]/20 font-black">PRO</span>}
+                    </div>
+                    <p className="text-[8px] text-gray-500 uppercase font-mono truncate">{u.email}</p>
+                    </div>
+                    <div className="flex gap-2">
+                    <button 
+                        onClick={() => handleEditUser(u)} 
+                        className="w-10 h-10 bg-white/5 border border-white/10 rounded-xl flex items-center justify-center text-xs text-[#00f2ff] active:scale-90 shadow-lg hover:bg-white/10 transition-all"
+                        title="Edit User & Premium"
+                    >
+                        <i className="fas fa-user-edit"></i>
+                    </button>
+                    
+                    <button 
+                        onClick={() => handleDeleteUser(u)} 
+                        className="w-10 h-10 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center justify-center text-xs text-red-500 active:scale-90 shadow-lg hover:bg-red-500/20 transition-all"
+                        title="Delete User"
+                    >
+                        <i className="fas fa-trash-alt"></i>
+                    </button>
+                    </div>
                 </div>
-                <div className="flex gap-2">
-                  <button onClick={() => {
-                    const name = prompt("Edit Username:", u.username);
-                    if(name) handleUpdate(`users/${u.uid}/username`, name);
-                  }} className="w-10 h-10 bg-white/5 border border-white/10 rounded-xl flex items-center justify-center text-xs text-blue-400 active:scale-90"><i className="fas fa-edit"></i></button>
-                  <button onClick={() => {
-                    if(confirm("DELETE USER PERMANENTLY?")) fetch(`${FIREBASE_CONFIG.databaseURL}/users/${u.uid}.json`, { method: 'DELETE' }).then(fetchData);
-                  }} className="w-10 h-10 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center justify-center text-xs text-red-500 active:scale-90"><i className="fas fa-trash-alt"></i></button>
-                </div>
-              </div>
-            ))}
+                ))
+            )}
           </div>
         )}
 
@@ -318,82 +406,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onExit }) => {
                 <p className="text-[9px] font-bold uppercase tracking-tight text-white/70">Invalid keys will cause the "API key not valid" error. Please ensure you use official Gemini API Keys from Google AI Studio.</p>
              </div>
              <button onClick={() => handleUpdate('ai_api_keys', aiKeys.split('\n').map(k => k.trim()).filter(k => k.length > 5))} className="w-full py-5 bg-[#00f2ff] text-black font-black rounded-2xl text-[10px] uppercase shadow-xl active:scale-95">Sync AI Key Pool</button>
-          </div>
-        )}
-
-        {activeTab === 'agents' && (
-          <div className="space-y-4">
-             <button onClick={() => {
-               const name = prompt("Agent Name:");
-               if(name) {
-                 const instr = prompt("Instructions (How should it behave?):");
-                 handleUpdate(`ai_agents/${Date.now()}`, { name, instruction: instr, status: 'active' });
-               }
-             }} className="w-full py-5 bg-white/5 border border-dashed border-white/20 rounded-[2rem] text-[10px] font-black uppercase tracking-widest shadow-xl">+ Add Neural Agent</button>
-             {aiAgents.map(agent => (
-               <div key={agent.id} className="bg-[#151525] border border-white/5 rounded-[2rem] p-6 shadow-xl">
-                  <div className="flex justify-between items-center mb-4">
-                     <h4 className="font-black text-xs uppercase tracking-tight">{agent.name}</h4>
-                     <button onClick={() => handleUpdate(`ai_agents/${agent.id}/status`, agent.status === 'active' ? 'maintenance' : 'active')} className={`text-[8px] font-black px-4 py-2 rounded-xl uppercase border ${agent.status === 'active' ? 'bg-green-500/10 text-green-500 border-green-500/20' : 'bg-orange-500/10 text-orange-500 border-orange-500/20'}`}>
-                       {agent.status}
-                     </button>
-                  </div>
-                  <p className="text-[9px] text-gray-500 uppercase font-bold tracking-widest line-clamp-3 mb-6 bg-black/10 p-4 rounded-xl">{agent.instruction}</p>
-                  <div className="flex gap-3">
-                    <button onClick={() => { const instr = prompt("New Instruction:", agent.instruction); if(instr) handleUpdate(`ai_agents/${agent.id}/instruction`, instr); }} className="flex-1 py-3 bg-white/5 rounded-xl text-[9px] font-black uppercase border border-white/5">Update Intel</button>
-                    <button onClick={() => { if(confirm("Delete Agent?")) fetch(`${FIREBASE_CONFIG.databaseURL}/ai_agents/${agent.id}.json`, { method: 'DELETE' }).then(fetchData); }} className="px-5 py-3 text-red-500 active:scale-90"><i className="fas fa-trash-alt"></i></button>
-                  </div>
-               </div>
-             ))}
-          </div>
-        )}
-
-        {activeTab === 'banner' && (
-          <div className="bg-[#151525] border border-white/5 rounded-[2.5rem] p-8 space-y-6">
-             <InputField label="Promotion Image URL" value={promoBanner?.imageUrl || ''} onChange={v => setPromoBanner({...promoBanner!, imageUrl: v})} />
-             <InputField label="Destination Link (URL)" value={promoBanner?.linkUrl || ''} onChange={v => setPromoBanner({...promoBanner!, linkUrl: v})} />
-             <div className="flex items-center justify-between p-5 bg-[#070312] border border-white/5 rounded-2xl">
-                <span className="text-[10px] font-black uppercase tracking-widest">Visibility Status</span>
-                <button onClick={() => setPromoBanner({...promoBanner!, enabled: !promoBanner?.enabled})} className={`w-12 h-6 rounded-full relative transition-all ${promoBanner?.enabled ? 'bg-green-500' : 'bg-gray-700'}`}>
-                   <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full transition-all ${promoBanner?.enabled ? 'right-0.5' : 'left-0.5'}`}></div>
-                </button>
-             </div>
-             <button onClick={() => handleUpdate('promo_banner', promoBanner)} className="w-full py-5 bg-[#00f2ff] text-black font-black rounded-2xl text-[10px] uppercase shadow-xl">Apply Banner Sync</button>
-          </div>
-        )}
-
-        {activeTab === 'suggestions' && (
-          <div className="space-y-4">
-             {suggestions.length === 0 ? (
-               <div className="text-center py-20 opacity-30 text-[10px] font-black uppercase">No User Feedback</div>
-             ) : (
-               suggestions.map(s => (
-                 <div key={s.id} className="bg-[#151525] border border-white/5 rounded-[2rem] p-6 shadow-xl">
-                    <div className="flex items-center gap-3 mb-4">
-                       <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center font-black text-[10px]">{s.username?.charAt(0)}</div>
-                       <p className="text-[9px] font-black text-[#00f2ff] uppercase tracking-widest">{s.username}</p>
-                    </div>
-                    <p className="text-xs font-medium mb-6 leading-relaxed bg-[#0a0a1a] p-4 rounded-xl border border-white/5">{s.message}</p>
-                    {!s.replied ? (
-                      <button onClick={() => {
-                        const reply = prompt("Enter Studio Response:");
-                        if(reply) {
-                          const notifId = Date.now().toString();
-                          Promise.all([
-                            handleUpdate(`user_suggestions/${s.id}/replied`, true),
-                            fetch(`${FIREBASE_CONFIG.databaseURL}/users/${s.user_uid}/notifications/${notifId}.json`, { method: 'PUT', body: JSON.stringify({ message: `Studio Reply: ${reply}`, timestamp: new Date().toISOString(), read: false, type: 'system' }) })
-                          ]).then(fetchData);
-                        }
-                      }} className="w-full py-4 bg-[#00f2ff] text-black font-black rounded-xl text-[10px] uppercase shadow-lg active:scale-95">Push Official Reply</button>
-                    ) : (
-                      <div className="flex items-center justify-center gap-2 py-2 opacity-40">
-                         <i className="fas fa-check-double text-[#00f2ff]"></i>
-                         <span className="text-[9px] font-black uppercase tracking-widest">Informed User</span>
-                      </div>
-                    )}
-                 </div>
-               ))
-             )}
           </div>
         )}
 

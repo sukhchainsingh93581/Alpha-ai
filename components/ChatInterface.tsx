@@ -10,13 +10,19 @@ interface ChatInterfaceProps {
   onRegenerate?: () => void;
   onNavigate?: (page: string) => void;
   isAiReady?: boolean;
+  // New props for Custom Pro AI behavior
+  selectedTool: string | null;
+  customInstructions: string;
+  onUpdateInstructions: (instr: string) => void;
 }
 
 const ChatInterface: React.FC<ChatInterfaceProps> = ({ 
-  messages, onSend, isGenerating, user, onDeleteMessage, onRegenerate, onNavigate, isAiReady 
+  messages, onSend, isGenerating, user, onDeleteMessage, onRegenerate, onNavigate, isAiReady,
+  selectedTool, customInstructions, onUpdateInstructions
 }) => {
   const [inputText, setInputText] = useState('');
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -85,6 +91,34 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   return (
     <div className="flex flex-col h-full bg-[var(--bg-primary)] relative">
+      {/* Custom Instruction Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-6">
+          <div className="absolute inset-0 bg-black/90 backdrop-blur-md" onClick={() => setIsModalOpen(false)}></div>
+          <div className="relative w-full max-w-[340px] bg-[var(--bg-card)] border border-[var(--border)] rounded-[2.5rem] p-8 shadow-2xl animate-in zoom-in duration-300">
+            <div className="text-center mb-6">
+              <div className="w-14 h-14 bg-[var(--accent)]/10 border border-[var(--accent)]/20 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <i className="fas fa-sliders text-xl text-[var(--accent)]"></i>
+              </div>
+              <h2 className="text-xl font-black uppercase tracking-tighter">AI Custom Core</h2>
+              <p className="text-[10px] text-[var(--text-secondary)] font-bold uppercase tracking-widest mt-1">Set Neural Instructions</p>
+            </div>
+            
+            <textarea 
+              autoFocus
+              value={customInstructions}
+              onChange={(e) => onUpdateInstructions(e.target.value)}
+              placeholder="Example: Respond only in Hindi... or Behave like a professional hacker..."
+              className="w-full h-40 bg-[var(--bg-primary)] border border-[var(--border)] rounded-2xl p-4 text-xs text-[var(--text-primary)] outline-none focus:border-[var(--accent)] transition-all resize-none custom-scrollbar"
+            />
+            
+            <div className="mt-6 flex gap-2">
+              <button onClick={() => setIsModalOpen(false)} className="flex-1 py-4 bg-[var(--accent)] text-black rounded-xl text-[10px] font-black uppercase shadow-lg shadow-[var(--accent)]/30">Set Instructions</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar pb-10">
         {messages.length === 0 && (
           <div className="h-full flex flex-col items-center justify-center opacity-20 text-center px-10">
@@ -143,6 +177,18 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
       <div className="p-4 bg-[var(--bg-secondary)] border-t border-[var(--border)]">
         <form onSubmit={handleSubmit} className="flex gap-2 items-center w-full">
+          {/* Custom Pro Instruction Button (Far Left) */}
+          {selectedTool === 'Custom Pro AI' && (
+            <button 
+              type="button"
+              onClick={() => setIsModalOpen(true)}
+              className="w-12 h-12 bg-[var(--bg-primary)] border border-[var(--border)] rounded-2xl flex items-center justify-center text-[var(--accent)] shadow-xl active:scale-90 transition-all shrink-0"
+              title="Set Custom Instruction"
+            >
+              <i className="fas fa-gears text-base"></i>
+            </button>
+          )}
+
           <input 
             type="file" 
             className="hidden" 

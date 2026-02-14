@@ -25,7 +25,6 @@ const App: React.FC = () => {
   const [projects, setProjects] = useState<ChatProject[]>([]);
   
   const [customInstructions, setCustomInstructions] = useState<string>('');
-  const [isInstructionModalOpen, setIsInstructionModalOpen] = useState(false);
 
   /**
    * SECURE KEY RECONSTRUCTION: AIzaSyA3DuvOwAWRhPBTd94ivuEME78QPiHHhaQ
@@ -55,7 +54,6 @@ const App: React.FC = () => {
       globalObj.process.env.API_KEY = masterKey;
       
       setIsAiReady(true);
-      console.log("AI Engine initialized with new key protocols.");
     };
 
     initializeAI();
@@ -108,6 +106,24 @@ const App: React.FC = () => {
     setUser(userData);
     localStorage.setItem('user_uid', userData.uid);
     setCurrentPage('dashboard');
+  };
+
+  const handleToggleTheme = () => {
+    const currentTheme = user?.theme || globalTheme || DEFAULT_DARK_THEME;
+    const isDark = currentTheme.bgPrimary === DEFAULT_DARK_THEME.bgPrimary;
+    const nextTheme = isDark ? DEFAULT_LIGHT_THEME : DEFAULT_DARK_THEME;
+    
+    if (user) {
+      const updatedUser = { ...user, theme: nextTheme };
+      setUser(updatedUser);
+      // Sync to Firebase
+      fetch(`${FIREBASE_CONFIG.databaseURL}/users/${user.uid}/theme.json`, {
+        method: 'PUT',
+        body: JSON.stringify(nextTheme)
+      }).catch(e => console.error("Theme sync failed", e));
+    } else {
+      setGlobalTheme(nextTheme);
+    }
   };
 
   const handleSendMessage = async (text: string) => {
@@ -183,7 +199,15 @@ const App: React.FC = () => {
   if (currentPage === 'auth') return <Auth onAuthSuccess={handleAuthSuccess} />;
 
   return (
-    <Layout activePage={currentPage} onNavigate={setCurrentPage} onLogout={() => { setUser(null); setCurrentPage('auth'); localStorage.removeItem('user_uid'); }} user={user} onToggleTheme={() => {}} appSettings={appSettings} themeToApply={themeToApply}>
+    <Layout 
+      activePage={currentPage} 
+      onNavigate={setCurrentPage} 
+      onLogout={() => { setUser(null); setCurrentPage('auth'); localStorage.removeItem('user_uid'); }} 
+      user={user} 
+      onToggleTheme={handleToggleTheme} 
+      appSettings={appSettings} 
+      themeToApply={themeToApply}
+    >
       {currentPage === 'dashboard' && <Dashboard user={user} onStartChat={(t) => { setSelectedTool(t); setMessages([]); setCurrentProjectId(null); setCurrentPage('chat'); }} projects={projects} onLoadProject={(p) => { setCurrentProjectId(p.id); setSelectedTool(p.toolName); setMessages(p.messages); setCustomInstructions(p.customInstructions || ''); setCurrentPage('chat'); }} onDeleteProject={() => {}} onNavigate={setCurrentPage} />}
       {currentPage === 'tools' && <Tools onStartChat={(t) => { setSelectedTool(t); setMessages([]); setCurrentProjectId(null); setCurrentPage('chat'); }} user={user} />}
       {currentPage === 'premium' && <Premium user={user} />}
@@ -205,6 +229,9 @@ const App: React.FC = () => {
             onRegenerate={() => {}}
             onNavigate={setCurrentPage}
             isAiReady={isAiReady}
+            selectedTool={selectedTool}
+            customInstructions={customInstructions}
+            onUpdateInstructions={setCustomInstructions}
           />
         </div>
       )}
