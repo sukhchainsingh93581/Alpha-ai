@@ -10,8 +10,8 @@ export const generateAIContentStream = async (
   const globalObj = (typeof globalThis !== 'undefined' ? globalThis : window) as any;
   const apiKey = globalObj.process?.env?.API_KEY;
 
-  if (!apiKey) {
-    throw new Error("AI Engine initializing...");
+  if (!apiKey || apiKey.length < 10) {
+    throw new Error("AI Engine not initialized. Re-linking API Key...");
   }
   
   const ai = new GoogleGenAI({ apiKey });
@@ -30,7 +30,7 @@ export const generateAIContentStream = async (
     ? `STRICT INSTRUCTION: ${overrideSystemInstruction}` 
     : DEV_AI_INSTRUCTIONS;
 
-  // Using gemini-3-flash-preview for high capacity and stability
+  // Using gemini-3-flash-preview for maximum speed and lower quota usage
   const modelToUse = 'gemini-3-flash-preview';
 
   try {
@@ -56,7 +56,12 @@ export const generateAIContentStream = async (
     return fullText;
   } catch (error: any) {
     console.error("AI Generation Error:", error);
-    const msg = error?.message || error?.toString() || "Unknown AI error";
+    const msg = error?.message || error?.toString() || "Connection Lost";
+    
+    if (msg.includes("403")) {
+      throw new Error("API Key Blocked: Google has likely revoked this key due to public exposure. Use a new one from AI Studio.");
+    }
+    
     throw new Error(msg);
   }
 };
