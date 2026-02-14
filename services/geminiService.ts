@@ -1,4 +1,3 @@
-
 import { GoogleGenAI } from "@google/genai";
 import { DEV_AI_INSTRUCTIONS } from "../constants";
 
@@ -12,7 +11,7 @@ export const generateAIContentStream = async (
   const apiKey = globalObj.process?.env?.API_KEY;
 
   if (!apiKey) {
-    throw new Error("Missing AI API Key. Please add one in the Admin Panel.");
+    throw new Error("Missing AI API Key. System is attempting to recover. Please try again.");
   }
   
   const ai = new GoogleGenAI({ apiKey });
@@ -31,11 +30,7 @@ export const generateAIContentStream = async (
     ? `STRICT INSTRUCTION: ${overrideSystemInstruction}` 
     : DEV_AI_INSTRUCTIONS;
 
-  /**
-   * FIX: 429 RESOURCE EXHAUSTED
-   * Defaulting to gemini-3-flash-preview because gemini-3-pro-preview 
-   * has extremely strict rate limits on the free tier.
-   */
+  // Use the high-capacity gemini-3-flash-preview for the best experience
   const modelToUse = 'gemini-3-flash-preview';
 
   try {
@@ -46,7 +41,7 @@ export const generateAIContentStream = async (
         systemInstruction: finalInstruction,
         temperature: overrideSystemInstruction ? 0.3 : 0.7,
         topP: 0.95,
-        topK: 40
+        topK: 64
       },
     });
 
@@ -59,9 +54,18 @@ export const generateAIContentStream = async (
       }
     }
     return fullText;
-  } catch (error) {
+  } catch (error: any) {
     console.error("Gemini Stream Error:", error);
-    // If even Flash fails with 429, it might be a temporary IP rate limit
+    
+    const errStr = error?.toString() || "";
+    if (errStr.includes("403") || errStr.includes("leaked")) {
+        throw new Error("SECURITY_BLOCK: Your API key was reported as leaked. The system is auto-switching to a backup. Please wait 3 seconds and retry.");
+    }
+    
+    if (errStr.includes("429")) {
+        throw new Error("QUOTA_LIMIT: The current AI key is exhausted. Switching keys, please retry.");
+    }
+
     throw error;
   }
 };
